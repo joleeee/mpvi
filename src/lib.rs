@@ -155,22 +155,21 @@ impl MpvHandle {
         self.sender.send(MpvMsg::NewSub(sender)).await.unwrap();
     }
 
-    pub async fn pause(&self) {
+    pub async fn set_property(&self, property: &str, value: serde_json::Value) {
         self.sender
             .send(MpvMsg::Command(Command {
-                command: vec!["set_property".into(), "pause".into(), true.into()],
+                command: vec!["set_property".into(), property.into(), value],
             }))
             .await
             .unwrap();
     }
 
+    pub async fn pause(&self) {
+        self.set_property("pause", true.into()).await
+    }
+
     pub async fn unpause(&self) {
-        self.sender
-            .send(MpvMsg::Command(Command {
-                command: vec!["set_property".into(), "pause".into(), false.into()],
-            }))
-            .await
-            .unwrap();
+        self.set_property("pause", false.into()).await
     }
 }
 
