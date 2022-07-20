@@ -17,7 +17,7 @@ struct Command {
 
 #[derive(Debug)]
 enum MpvMsg {
-    Command(Command, oneshot::Sender<Result<(), String>>),
+    Command(Command, oneshot::Sender<Result<serde_json::Value, String>>),
     NewSub(mpsc::Sender<Event>),
 }
 
@@ -42,6 +42,8 @@ struct Awck {
     #[allow(dead_code)]
     request_id: u64,
     error: String,
+    #[serde(default)]
+    data: serde_json::Value,
 }
 
 #[derive(Deserialize, Clone, Debug)]
@@ -97,7 +99,7 @@ impl MpvSocket {
         self.writer.write_u8(b'\n').await.unwrap();
     }
 
-    async fn get_awck(&mut self) -> Result<(), String> {
+    async fn get_awck(&mut self) -> Result<serde_json::Value, String> {
         let awck = loop {
             match Self::recv_response(&mut self.reader).await {
                 MpvResponse::Awck(awck) => break awck,
@@ -106,7 +108,7 @@ impl MpvSocket {
         };
 
         if awck.error == "success" {
-            Ok(())
+            Ok(awck.data)
         } else {
             Err(awck.error)
         }
@@ -160,23 +162,29 @@ impl MpvHandle {
         self.sender.send(MpvMsg::NewSub(sender)).await.unwrap();
     }
 
+    async fn send_command(
+        &self,
+        command: Vec<serde_json::Value>,
+    ) -> Result<serde_json::Value, String> {
+        let (sender, receiver) = oneshot::channel();
+        self.sender
+            .send(MpvMsg::Command(Command { command }, sender))
+            .await
+            .unwrap();
+
+        receiver.await.unwrap()
+    }
+
     pub async fn set_property(
         &self,
         property: &str,
         value: serde_json::Value,
     ) -> Result<(), String> {
-        let (sender, receiver) = oneshot::channel();
-        self.sender
-            .send(MpvMsg::Command(
-                Command {
-                    command: vec!["set_property".into(), property.into(), value],
-                },
-                sender,
-            ))
-            .await
-            .unwrap();
+        let res = self
+            .send_command(vec!["set_property".into(), property.into(), value])
+            .await;
 
-        receiver.await.unwrap()
+        res.map(|val| val.as_null().expect("should not be set"))
     }
 
     pub async fn pause(&self) -> Result<(), String> {
