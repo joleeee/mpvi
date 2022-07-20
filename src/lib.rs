@@ -7,7 +7,7 @@ use tokio::{
         UnixStream,
     },
     select,
-    sync::mpsc,
+    sync::{mpsc, oneshot},
 };
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -17,7 +17,7 @@ struct Command {
 
 #[derive(Debug)]
 enum MpvMsg {
-    Command(Command),
+    Command(Command, oneshot::Sender<Result<(), String>>),
     NewSub(mpsc::Sender<Event>),
 }
 
@@ -91,12 +91,13 @@ impl MpvSocket {
         serde_json::from_str(&buf).unwrap()
     }
 
-    async fn handle_message(&mut self, cmd: Command) -> Result<(), String> {
+    async fn send_message(&mut self, cmd: Command) {
         let txt = serde_json::to_string(&cmd).unwrap();
-
         self.writer.write_all(txt.as_bytes()).await.unwrap();
         self.writer.write_u8(b'\n').await.unwrap();
+    }
 
+    async fn get_awck(&mut self) -> Result<(), String> {
         let awck = loop {
             match Self::recv_response(&mut self.reader).await {
                 MpvResponse::Awck(awck) => break awck,
@@ -122,7 +123,11 @@ impl MpvSocket {
             select! {
                 Some(msg) = self.handle_receiver.recv() => {
                     match msg {
-                        MpvMsg::Command(cmd) => self.handle_message(cmd).await.unwrap(),
+                        MpvMsg::Command(cmd, oneshot) => {
+                            self.send_message(cmd).await;
+                            let awck = self.get_awck().await;
+                            oneshot.send(awck).unwrap();
+                        },
                         MpvMsg::NewSub(tx) => self.event_senders.push(tx),
                     }
                 },
@@ -155,20 +160,30 @@ impl MpvHandle {
         self.sender.send(MpvMsg::NewSub(sender)).await.unwrap();
     }
 
-    pub async fn set_property(&self, property: &str, value: serde_json::Value) {
+    pub async fn set_property(
+        &self,
+        property: &str,
+        value: serde_json::Value,
+    ) -> Result<(), String> {
+        let (sender, receiver) = oneshot::channel();
         self.sender
-            .send(MpvMsg::Command(Command {
-                command: vec!["set_property".into(), property.into(), value],
-            }))
+            .send(MpvMsg::Command(
+                Command {
+                    command: vec!["set_property".into(), property.into(), value],
+                },
+                sender,
+            ))
             .await
             .unwrap();
+
+        receiver.await.unwrap()
     }
 
-    pub async fn pause(&self) {
+    pub async fn pause(&self) -> Result<(), String> {
         self.set_property("pause", true.into()).await
     }
 
-    pub async fn unpause(&self) {
+    pub async fn unpause(&self) -> Result<(), String> {
         self.set_property("pause", false.into()).await
     }
 }
@@ -187,13 +202,13 @@ mod tests {
         tokio::spawn(print_events(rx));
 
         println!("Pausing...");
-        handle.pause().await;
+        handle.pause().await.unwrap();
         sleep(Duration::from_millis(1000)).await;
         println!("Unpausing...");
-        handle.unpause().await;
+        handle.unpause().await.unwrap();
         sleep(Duration::from_millis(1000)).await;
         println!("Pausing...");
-        handle.pause().await;
+        handle.pause().await.unwrap();
 
         // have to wait for the message to be sent (until we add in waiting for awck or someting)
         sleep(Duration::from_millis(100)).await;
