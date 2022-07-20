@@ -187,12 +187,22 @@ impl MpvHandle {
         res.map(|val| val.as_null().expect("should not be set"))
     }
 
+    pub async fn get_property(&self, property: &str) -> Result<serde_json::Value, String> {
+        self.send_command(vec!["get_property".into(), property.into()])
+            .await
+    }
+
     pub async fn pause(&self) -> Result<(), String> {
         self.set_property("pause", true.into()).await
     }
 
     pub async fn unpause(&self) -> Result<(), String> {
         self.set_property("pause", false.into()).await
+    }
+
+    pub async fn get_pause(&self) -> Result<bool, String> {
+        let res = self.get_property("pause").await;
+        res.map(|val| val.as_bool().unwrap())
     }
 }
 
@@ -211,12 +221,17 @@ mod tests {
 
         println!("Pausing...");
         handle.pause().await.unwrap();
+        println!("Paused? {}", handle.get_pause().await.unwrap());
         sleep(Duration::from_millis(1000)).await;
+
         println!("Unpausing...");
         handle.unpause().await.unwrap();
+        println!("Paused? {}", handle.get_pause().await.unwrap());
         sleep(Duration::from_millis(1000)).await;
+
         println!("Pausing...");
         handle.pause().await.unwrap();
+        println!("Paused? {}", handle.get_pause().await.unwrap());
 
         // have to wait for the message to be sent (until we add in waiting for awck or someting)
         sleep(Duration::from_millis(100)).await;
