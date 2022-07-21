@@ -32,6 +32,8 @@ pub enum Event {
     // Why are these undocumented?
     Pause,
     Unpause,
+    TracksChanged,
+    MetadataUpdate,
 }
 
 #[derive(Serialize, EnumString, Display, EnumIter, Clone, Debug)]
