@@ -6,6 +6,7 @@ use sock::{Command, MpvError, MpvMsg, MpvSocket};
 
 mod handle;
 pub use handle::MpvHandle as Mpv;
+pub use handle::option;
 
 #[derive(Deserialize, Clone, Debug)]
 #[serde(tag = "event", rename_all = "kebab-case")]
