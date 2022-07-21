@@ -1,51 +1,11 @@
 use serde::{Deserialize, Serialize};
-use std::io;
 use strum::EnumIter;
-use tokio::{
-    io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
-    net::{
-        unix::{OwnedReadHalf, OwnedWriteHalf},
-        UnixStream,
-    },
-    select,
-    sync::{mpsc, oneshot},
-};
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
-struct Command {
-    command: Vec<serde_json::Value>,
-}
+mod sock;
+use sock::{Command, MpvMsg, MpvSocket};
 
-#[derive(Debug)]
-enum MpvMsg {
-    Command(Command, oneshot::Sender<Result<serde_json::Value, String>>),
-    NewSub(mpsc::Sender<Event>),
-}
-
-struct MpvSocket {
-    reader: BufReader<OwnedReadHalf>,
-    writer: OwnedWriteHalf,
-    /// Receives messages from the handles
-    handle_receiver: mpsc::Receiver<MpvMsg>,
-    /// Vector of senders to send events to
-    event_senders: Vec<mpsc::Sender<Event>>,
-}
-
-#[derive(Deserialize, Debug)]
-#[serde(untagged)]
-enum MpvResponse {
-    Awck(Awck),
-    Event(Event),
-}
-
-#[derive(Deserialize, Debug)]
-struct Awck {
-    #[allow(dead_code)]
-    request_id: u64,
-    error: String,
-    #[serde(default)]
-    data: serde_json::Value,
-}
+mod handle;
+pub use handle::MpvHandle as Mpv;
 
 #[derive(Deserialize, Clone, Debug)]
 #[serde(tag = "event", rename_all = "kebab-case")]
@@ -235,151 +195,18 @@ pub enum Property {
     Pause,
 }
 
-impl MpvSocket {
-    pub async fn new(path: &str, receiver: mpsc::Receiver<MpvMsg>) -> io::Result<Self> {
-        let stream = UnixStream::connect(path).await?;
-        let (read, write) = stream.into_split();
-        let read = BufReader::new(read);
-
-        Ok(Self {
-            handle_receiver: receiver,
-            reader: read,
-            writer: write,
-            event_senders: Vec::new(),
-        })
-    }
-
-    // work around not being able to share ownership
-    async fn recv_response(reader: &mut BufReader<OwnedReadHalf>) -> MpvResponse {
-        let mut buf = String::new();
-        reader.read_line(&mut buf).await.unwrap();
-        serde_json::from_str(&buf).unwrap()
-    }
-
-    async fn send_message(&mut self, cmd: Command) {
-        let txt = serde_json::to_string(&cmd).unwrap();
-        self.writer.write_all(txt.as_bytes()).await.unwrap();
-        self.writer.write_u8(b'\n').await.unwrap();
-    }
-
-    async fn get_awck(&mut self) -> Result<serde_json::Value, String> {
-        let awck = loop {
-            match Self::recv_response(&mut self.reader).await {
-                MpvResponse::Awck(awck) => break awck,
-                MpvResponse::Event(e) => self.propagate_event(e).await,
-            }
-        };
-
-        if awck.error == "success" {
-            Ok(awck.data)
-        } else {
-            Err(awck.error)
-        }
-    }
-
-    async fn propagate_event(&mut self, event: Event) {
-        for tx in &self.event_senders {
-            tx.send(event.clone()).await.unwrap();
-        }
-    }
-
-    pub async fn run_actor(mut self) {
-        loop {
-            select! {
-                Some(msg) = self.handle_receiver.recv() => {
-                    match msg {
-                        MpvMsg::Command(cmd, oneshot) => {
-                            self.send_message(cmd).await;
-                            let awck = self.get_awck().await;
-                            oneshot.send(awck).unwrap();
-                        },
-                        MpvMsg::NewSub(tx) => self.event_senders.push(tx),
-                    }
-                },
-                resp = Self::recv_response(&mut self.reader) => {
-                    match resp {
-                        MpvResponse::Event(e) => self.propagate_event(e).await,
-                        MpvResponse::Awck(_) => panic!("should never receieve an unsolicited awck"),
-                    }
-                }
-            }
-        }
-    }
-}
-
-#[derive(Clone)]
-pub struct MpvHandle {
-    sender: mpsc::Sender<MpvMsg>,
-}
-
-impl MpvHandle {
-    pub async fn new(ipc: &str) -> Self {
-        let (sender, receiver) = mpsc::channel(8);
-        let actor = MpvSocket::new(ipc, receiver).await.unwrap();
-        tokio::spawn(actor.run_actor());
-
-        Self { sender }
-    }
-
-    pub async fn subscribe_events(&self, sender: mpsc::Sender<Event>) {
-        self.sender.send(MpvMsg::NewSub(sender)).await.unwrap();
-    }
-
-    async fn send_command(
-        &self,
-        command: Vec<serde_json::Value>,
-    ) -> Result<serde_json::Value, String> {
-        let (sender, receiver) = oneshot::channel();
-        self.sender
-            .send(MpvMsg::Command(Command { command }, sender))
-            .await
-            .unwrap();
-
-        receiver.await.unwrap()
-    }
-
-    pub async fn set_property(
-        &self,
-        property: Property,
-        value: serde_json::Value,
-    ) -> Result<(), String> {
-        let property = serde_json::to_string(&property).unwrap();
-        let property = property.trim_matches('"'); // eww
-        let res = self
-            .send_command(vec!["set_property".into(), property.into(), value])
-            .await;
-
-        res.map(|val| val.as_null().expect("should not be set"))
-    }
-
-    pub async fn get_property(&self, property: &str) -> Result<serde_json::Value, String> {
-        self.send_command(vec!["get_property".into(), property.into()])
-            .await
-    }
-
-    pub async fn pause(&self) -> Result<(), String> {
-        self.set_property(Property::Pause, true.into()).await
-    }
-
-    pub async fn unpause(&self) -> Result<(), String> {
-        self.set_property(Property::Pause, false.into()).await
-    }
-
-    pub async fn get_pause(&self) -> Result<bool, String> {
-        let res = self.get_property("pause").await;
-        res.map(|val| val.as_bool().unwrap())
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use strum::IntoEnumIterator;
-    use tokio::time::{sleep, Duration};
+    use tokio::{
+        sync::mpsc,
+        time::{sleep, Duration},
+    };
 
     #[tokio::test]
     async fn mpv_test() {
-        let handle = MpvHandle::new("/tmp/mpv.sock").await;
+        let handle = Mpv::new("/tmp/mpv.sock").await;
 
         let (tx, rx) = mpsc::channel(8);
         handle.subscribe_events(tx).await;
@@ -411,7 +238,7 @@ mod tests {
 
     #[tokio::test]
     async fn property_test() {
-        let handle = MpvHandle::new("/tmp/mpv.sock").await;
+        let handle = Mpv::new("/tmp/mpv.sock").await;
         for property in Property::iter() {
             let property = serde_json::to_string(&property).unwrap();
             let property = property.trim_matches('"');
