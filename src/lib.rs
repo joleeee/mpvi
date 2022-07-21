@@ -5,8 +5,8 @@ mod sock;
 use sock::{Command, MpvError, MpvMsg, MpvSocket};
 
 mod handle;
-pub use handle::MpvHandle as Mpv;
 pub use handle::option;
+pub use handle::MpvHandle as Mpv;
 
 #[derive(Deserialize, Clone, Debug)]
 #[serde(tag = "event", rename_all = "kebab-case")]
@@ -202,12 +202,12 @@ pub enum Property {
 mod tests {
     use super::handle::option;
     use super::*;
+    use serial_test::serial;
     use strum::IntoEnumIterator;
     use tokio::{
         sync::mpsc,
         time::{sleep, Duration},
     };
-    use serial_test::serial;
 
     #[tokio::test]
     #[serial]

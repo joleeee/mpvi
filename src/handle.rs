@@ -1,6 +1,6 @@
 use tokio::sync::{mpsc, oneshot};
 
-use super::{Command, Event, MpvMsg, MpvSocket, Property, MpvError};
+use super::{Command, Event, MpvError, MpvMsg, MpvSocket, Property};
 
 pub mod option {
     use serde::Serialize;
@@ -100,7 +100,11 @@ impl MpvHandle {
         res.map(|val| val.as_bool().unwrap())
     }
 
-    pub async fn seek<S: ToString>(&self, seconds: S, mode: option::Seek) -> Result<(), HandleError> {
+    pub async fn seek<S: ToString>(
+        &self,
+        seconds: S,
+        mode: option::Seek,
+    ) -> Result<(), HandleError> {
         let mode = serde_json::to_value(&mode).unwrap();
 
         self.send_command(vec!["seek".into(), seconds.to_string().into(), mode])

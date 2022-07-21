@@ -38,7 +38,10 @@ pub struct MpvError(pub String);
 
 #[derive(Debug)]
 pub enum MpvMsg {
-    Command(Command, oneshot::Sender<Result<serde_json::Value, MpvError>>),
+    Command(
+        Command,
+        oneshot::Sender<Result<serde_json::Value, MpvError>>,
+    ),
     NewSub(mpsc::Sender<Event>),
 }
 
