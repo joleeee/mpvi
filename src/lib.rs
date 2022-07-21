@@ -205,6 +205,7 @@ mod tests {
         sync::mpsc,
         time::{sleep, Duration},
     };
+    use super::handle::option;
 
     #[tokio::test]
     async fn mpv_test() {
@@ -235,6 +236,24 @@ mod tests {
     async fn print_events(mut rx: mpsc::Receiver<Event>) {
         while let Some(event) = rx.recv().await {
             println!("event {:?}", event);
+        }
+    }
+
+    #[tokio::test]
+    async fn seek_test() {
+        let handle = Mpv::new("/tmp/mpv.sock").await;
+
+        use option::Seek::*;
+        let modes = [Absolute, Relative, AbsolutePercent, RelativePercent];
+
+        for m in &modes {
+            handle.seek(20_u32, *m).await.unwrap();
+            sleep(Duration::from_millis(200)).await
+        }
+
+        for m in &modes {
+            handle.seek(1f32, *m).await.unwrap();
+            sleep(Duration::from_millis(50)).await
         }
     }
 

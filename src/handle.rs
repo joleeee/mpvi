@@ -2,6 +2,19 @@ use tokio::sync::{mpsc, oneshot};
 
 use super::{Command, Event, MpvMsg, MpvSocket, Property};
 
+pub mod option {
+    use serde::Serialize;
+
+    #[derive(Serialize, Debug, Clone, Copy)]
+    #[serde(rename_all = "kebab-case")]
+    pub enum Seek {
+        Absolute,
+        Relative,
+        AbsolutePercent,
+        RelativePercent,
+    }
+}
+
 #[derive(Clone)]
 pub struct MpvHandle {
     sender: mpsc::Sender<MpvMsg>,
@@ -65,5 +78,13 @@ impl MpvHandle {
     pub async fn get_pause(&self) -> Result<bool, String> {
         let res = self.get_property(Property::Pause).await;
         res.map(|val| val.as_bool().unwrap())
+    }
+
+    pub async fn seek<S: ToString>(&self, seconds: S, mode: option::Seek) -> Result<(), String> {
+        let mode = serde_json::to_value(&mode).unwrap();
+
+        self.send_command(vec!["seek".into(), seconds.to_string().into(), mode])
+            .await
+            .map(|v| v.as_null().expect("should not be set"))
     }
 }
