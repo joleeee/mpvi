@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::io;
+use strum::EnumIter;
 use tokio::{
     io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
     net::{
@@ -70,6 +71,168 @@ pub enum Event {
     // Why are these undocumented?
     Pause,
     Unpause,
+}
+
+#[derive(Serialize, EnumIter, Clone, Debug)]
+#[serde(rename_all = "kebab-case")]
+// TODO: add all
+// TODO: how can me properly match property name -> output type? maybe a macro...
+// https://mpv.io/manual/master/#properties
+pub enum Property {
+    AudioSpeedCorrection,
+    VideoSpeedCorrection,
+    DisplaySyncActive,
+    Filename,
+    FileSize,
+    EstimatedFrameCount,
+    EstimatedFrameNumber,
+    Pid,
+    Path,
+    StreamOpenFilename,
+    MediaTitle,
+    FileFormat,
+    CurrentDemuxer,
+    StreamPath,
+    StreamPos,
+    StreamEnd,
+    Duration,
+    Avsync,
+    TotalAvsyncChange,
+    DecoderFrameDropCount,
+    FrameDropCount,
+    MistimedFrameCount,
+    VsyncRatio,
+    VoDelayedFrameCount,
+    PercentPos,
+    TimePos,
+    TimeStart,
+    TimeRemaining,
+    AudioPts,
+    PlaytimeRemaining,
+    PlaybackTime,
+    Chapter,
+    Edition,
+    CurrentEdition,
+    Chapters,
+    Editions,
+    EditionList,
+    Metadata,
+    FilteredMetadata,
+    ChapterMetadata,
+    //vf-metadata/<filter-label>
+    //af-metadata/<filter-label>
+    IdleActive,
+    CoreIdle,
+    CacheSpeed,
+    DemuxerCacheDuration,
+    DemuxerCacheTime,
+    DemuxerCacheIdle,
+    DemuxerCacheState,
+    DemuxerViaNetwork,
+    DemuxerStartTime,
+    PausedForCache,
+    CacheBufferingState,
+    EofReached,
+    Seeking,
+    MixerActive,
+    AoVolume,
+    AoMute,
+    AudioCodec,
+    AudioCodecName,
+    AudioParams,
+    AudioOutParams,
+    Colormatrix,
+    ColormatrixInputRange,
+    ColormatrixPrimaries,
+    Hwdec,
+    HwdecCurrent,
+    VideoFormat,
+    VideoCodec,
+    Width,
+    Height,
+    VideoParams,
+    Dwidth,
+    Dheight,
+    VideoDecParams,
+    VideoOutParams,
+    VideoFrameInfo,
+    ContainerFps,
+    EstimatedVfFps,
+    WindowScale,
+    CurrentWindowScale,
+    Focused,
+    DisplayNames,
+    DisplayFps,
+    EstimatedDisplayFps,
+    VsyncJitter,
+    DisplayWidth,
+    DisplayHeight,
+    DisplayHidpiScale,
+    VideoAspect,
+    OsdWidth,
+    OsdHeight,
+    OsdPar,
+    OsdDimensions,
+    MousePos,
+    SubText,
+    SubTextAss,
+    SecondarySubText,
+    SubStart,
+    SecondarySubStart,
+    SubEnd,
+    SecondarySubEnd,
+    PlaylistPos,
+    #[serde(rename = "playlist-pos-1")]
+    PlaylistPos1,
+    PlaylistCurrentPos,
+    PlaylistPlayingPos,
+    PlaylistCount,
+    Playlist,
+    TrackList,
+    //current-tracks/..
+    ChapterList,
+    //Av, not found
+    Vf,
+    Seekable,
+    PartiallySeekable,
+    PlaybackAbort,
+    CursorAutohide,
+    // OsdSymCc, INVALID UTF-8
+    // OsdAssCc,
+    VoConfigured,
+    VoPasses,
+    PerfInfo,
+    VideoBitrate,
+    AudioBitrate,
+    SubBitrate,
+    PacketVideoBitrate,
+    PacketAudioBitrate,
+    PacketSubBitrate,
+    AudioDeviceList,
+    AudioDevice,
+    CurrentVo,
+    CurrentAo,
+    SharedScriptProperties,
+    WorkingDirectory,
+    ProtocolList,
+    DecoderList,
+    EncoderList,
+    DemuxerLavfList,
+    InputKeyList,
+    MpvVersion,
+    MpvConfiguration,
+    FfmpegVersion,
+    LibassVersion,
+    //options/<name>
+    //file-local-options/<name>
+    //option-info/<name>
+    PropertyList,
+    ProfileList,
+    CommandList,
+    InputBindings,
+
+    // why is this not documented lol
+    Pause,
 }
 
 impl MpvSocket {
@@ -177,9 +340,11 @@ impl MpvHandle {
 
     pub async fn set_property(
         &self,
-        property: &str,
+        property: Property,
         value: serde_json::Value,
     ) -> Result<(), String> {
+        let property = serde_json::to_string(&property).unwrap();
+        let property = property.trim_matches('"'); // eww
         let res = self
             .send_command(vec!["set_property".into(), property.into(), value])
             .await;
@@ -193,11 +358,11 @@ impl MpvHandle {
     }
 
     pub async fn pause(&self) -> Result<(), String> {
-        self.set_property("pause", true.into()).await
+        self.set_property(Property::Pause, true.into()).await
     }
 
     pub async fn unpause(&self) -> Result<(), String> {
-        self.set_property("pause", false.into()).await
+        self.set_property(Property::Pause, false.into()).await
     }
 
     pub async fn get_pause(&self) -> Result<bool, String> {
@@ -209,6 +374,7 @@ impl MpvHandle {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use strum::IntoEnumIterator;
     use tokio::time::{sleep, Duration};
 
     #[tokio::test]
@@ -240,6 +406,21 @@ mod tests {
     async fn print_events(mut rx: mpsc::Receiver<Event>) {
         while let Some(event) = rx.recv().await {
             println!("event {:?}", event);
+        }
+    }
+
+    #[tokio::test]
+    async fn property_test() {
+        let handle = MpvHandle::new("/tmp/mpv.sock").await;
+        for property in Property::iter() {
+            let property = serde_json::to_string(&property).unwrap();
+            let property = property.trim_matches('"');
+
+            let res = handle.get_property(property).await;
+            if let Err(e) = res {
+                // acceptable error
+                assert_eq!(e, "property unavailable");
+            }
         }
     }
 }
