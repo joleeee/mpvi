@@ -29,8 +29,11 @@ impl MpvHandle {
         Ok(Self { sender })
     }
 
-    pub async fn subscribe_events(&self, sender: mpsc::Sender<Event>) {
-        self.sender.send(MpvMsg::NewSub(sender)).await.unwrap();
+    pub async fn subscribe_events(
+        &self,
+        sender: mpsc::Sender<Event>,
+    ) -> Result<(), mpsc::error::SendError<MpvMsg>> {
+        self.sender.send(MpvMsg::NewSub(sender)).await
     }
 
     async fn send_command(
