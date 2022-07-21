@@ -49,8 +49,8 @@ impl MpvHandle {
         res.map(|val| val.as_null().expect("should not be set"))
     }
 
-    pub async fn get_property(&self, property: &str) -> Result<serde_json::Value, String> {
-        self.send_command(vec!["get_property".into(), property.into()])
+    pub async fn get_property(&self, property: Property) -> Result<serde_json::Value, String> {
+        self.send_command(vec!["get_property".into(), property.to_string().into()])
             .await
     }
 
@@ -63,7 +63,7 @@ impl MpvHandle {
     }
 
     pub async fn get_pause(&self) -> Result<bool, String> {
-        let res = self.get_property("pause").await;
+        let res = self.get_property(Property::Pause).await;
         res.map(|val| val.as_bool().unwrap())
     }
 }

@@ -242,17 +242,22 @@ mod tests {
     async fn property_test() {
         let handle = Mpv::new("/tmp/mpv.sock").await;
         for property in Property::iter() {
-            let strum_txt = property.to_string();
-            let serde_txt = serde_json::to_string(&property).unwrap();
-            let serde_txt = serde_txt.trim_matches('"'); // eww
-
-            assert_eq!(strum_txt, serde_txt);
-
-            let res = handle.get_property(&strum_txt).await;
+            let res = handle.get_property(property).await;
             if let Err(e) = res {
                 // acceptable error
                 assert_eq!(e, "property unavailable");
             }
+        }
+    }
+
+    #[test]
+    fn ser_test() {
+        for property in Property::iter() {
+            let strum_txt = property.to_string();
+            let serde_txt = serde_json::to_string(&property).unwrap();
+            let serde_txt = serde_txt.trim_matches('"');
+
+            assert_eq!(strum_txt, serde_txt);
         }
     }
 }
