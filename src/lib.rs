@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use strum::{Display, EnumIter, EnumString};
 
 mod sock;
-use sock::{Command, MpvMsg, MpvSocket};
+use sock::{Command, MpvError, MpvMsg, MpvSocket};
 
 mod handle;
 pub use handle::MpvHandle as Mpv;
@@ -214,7 +214,7 @@ mod tests {
         let handle = Mpv::new("/tmp/mpv.sock").await.unwrap();
 
         let (tx, rx) = mpsc::channel(8);
-        handle.subscribe_events(tx).await;
+        handle.subscribe_events(tx).await.unwrap();
         tokio::spawn(print_events(rx));
 
         println!("Pausing...");
@@ -267,8 +267,11 @@ mod tests {
         for property in Property::iter() {
             let res = handle.get_property(property).await;
             if let Err(e) = res {
-                // acceptable error
-                assert_eq!(e, "property unavailable");
+                match e {
+                    // acceptable error
+                    handle::HandleError::MpvError(e) => assert_eq!(e.0, "property unavailable"),
+                    handle::HandleError::RecvError(e) => Err(e).unwrap(),
+                }
             }
         }
     }

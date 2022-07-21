@@ -34,8 +34,11 @@ pub struct Command {
 }
 
 #[derive(Debug)]
+pub struct MpvError(pub String);
+
+#[derive(Debug)]
 pub enum MpvMsg {
-    Command(Command, oneshot::Sender<Result<serde_json::Value, String>>),
+    Command(Command, oneshot::Sender<Result<serde_json::Value, MpvError>>),
     NewSub(mpsc::Sender<Event>),
 }
 
@@ -75,7 +78,7 @@ impl MpvSocket {
         self.writer.write_u8(b'\n').await.unwrap();
     }
 
-    async fn get_awck(&mut self) -> Result<serde_json::Value, String> {
+    async fn get_awck(&mut self) -> Result<serde_json::Value, MpvError> {
         let awck = loop {
             match Self::recv_response(&mut self.reader).await {
                 MpvResponse::Awck(awck) => break awck,
@@ -86,7 +89,7 @@ impl MpvSocket {
         if awck.error == "success" {
             Ok(awck.data)
         } else {
-            Err(awck.error)
+            Err(MpvError(awck.error))
         }
     }
 
