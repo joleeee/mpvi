@@ -13,6 +13,13 @@ pub mod option {
         AbsolutePercent,
         RelativePercent,
     }
+
+    #[derive(Serialize, Debug, Clone, Copy)]
+    #[serde(rename_all = "kebab-case")]
+    pub enum Insertion {
+        Append,
+        Replace,
+    }
 }
 
 #[derive(Clone)]
@@ -110,5 +117,18 @@ impl MpvHandle {
         self.send_command(vec!["seek".into(), seconds.to_string().into(), mode])
             .await
             .map(|v| v.as_null().expect("should not be set"))
+    }
+
+    pub async fn load_file(
+        &self,
+        file: &str,
+        insertion: option::Insertion,
+    ) -> Result<(), HandleError> {
+        let insertion = serde_json::to_value(&insertion).unwrap();
+
+        self.send_command(vec!["loadfile".into(), file.into(), insertion])
+            .await
+            // if replace, this returns something, just ignore it
+            .map(|_| ())
     }
 }
