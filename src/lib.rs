@@ -211,7 +211,7 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn mpv_test() {
-        let handle = Mpv::new("/tmp/mpv.sock").await;
+        let handle = Mpv::new("/tmp/mpv.sock").await.unwrap();
 
         let (tx, rx) = mpsc::channel(8);
         handle.subscribe_events(tx).await;
@@ -244,7 +244,7 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn seek_test() {
-        let handle = Mpv::new("/tmp/mpv.sock").await;
+        let handle = Mpv::new("/tmp/mpv.sock").await.unwrap();
 
         use option::Seek::*;
         let modes = [Absolute, Relative, AbsolutePercent, RelativePercent];
@@ -263,7 +263,7 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn property_test() {
-        let handle = Mpv::new("/tmp/mpv.sock").await;
+        let handle = Mpv::new("/tmp/mpv.sock").await.unwrap();
         for property in Property::iter() {
             let res = handle.get_property(property).await;
             if let Err(e) = res {

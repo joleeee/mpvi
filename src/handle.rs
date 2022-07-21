@@ -21,12 +21,12 @@ pub struct MpvHandle {
 }
 
 impl MpvHandle {
-    pub async fn new(ipc: &str) -> Self {
+    pub async fn new(ipc: &str) -> tokio::io::Result<Self> {
         let (sender, receiver) = mpsc::channel(8);
-        let actor = MpvSocket::new(ipc, receiver).await.unwrap();
+        let actor = MpvSocket::new(ipc, receiver).await?;
         tokio::spawn(actor.run_actor());
 
-        Self { sender }
+        Ok(Self { sender })
     }
 
     pub async fn subscribe_events(&self, sender: mpsc::Sender<Event>) {
