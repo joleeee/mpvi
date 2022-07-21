@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use strum::EnumIter;
+use strum::{Display, EnumIter, EnumString};
 
 mod sock;
 use sock::{Command, MpvMsg, MpvSocket};
@@ -33,8 +33,9 @@ pub enum Event {
     Unpause,
 }
 
-#[derive(Serialize, EnumIter, Clone, Debug)]
+#[derive(Serialize, EnumString, Display, EnumIter, Clone, Debug)]
 #[serde(rename_all = "kebab-case")]
+#[strum(serialize_all = "kebab-case")]
 // TODO: add all
 // TODO: how can me properly match property name -> output type? maybe a macro...
 // https://mpv.io/manual/master/#properties
@@ -143,6 +144,7 @@ pub enum Property {
     SecondarySubEnd,
     PlaylistPos,
     #[serde(rename = "playlist-pos-1")]
+    #[strum(serialize = "playlist-pos-1")]
     PlaylistPos1,
     PlaylistCurrentPos,
     PlaylistPlayingPos,
@@ -240,10 +242,13 @@ mod tests {
     async fn property_test() {
         let handle = Mpv::new("/tmp/mpv.sock").await;
         for property in Property::iter() {
-            let property = serde_json::to_string(&property).unwrap();
-            let property = property.trim_matches('"');
+            let strum_txt = property.to_string();
+            let serde_txt = serde_json::to_string(&property).unwrap();
+            let serde_txt = serde_txt.trim_matches('"'); // eww
 
-            let res = handle.get_property(property).await;
+            assert_eq!(strum_txt, serde_txt);
+
+            let res = handle.get_property(&strum_txt).await;
             if let Err(e) = res {
                 // acceptable error
                 assert_eq!(e, "property unavailable");

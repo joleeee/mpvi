@@ -38,10 +38,12 @@ impl MpvHandle {
         property: Property,
         value: serde_json::Value,
     ) -> Result<(), String> {
-        let property = serde_json::to_string(&property).unwrap();
-        let property = property.trim_matches('"'); // eww
         let res = self
-            .send_command(vec!["set_property".into(), property.into(), value])
+            .send_command(vec![
+                "set_property".into(),
+                property.to_string().into(),
+                value,
+            ])
             .await;
 
         res.map(|val| val.as_null().expect("should not be set"))
