@@ -199,15 +199,17 @@ pub enum Property {
 
 #[cfg(test)]
 mod tests {
+    use super::handle::option;
     use super::*;
     use strum::IntoEnumIterator;
     use tokio::{
         sync::mpsc,
         time::{sleep, Duration},
     };
-    use super::handle::option;
+    use serial_test::serial;
 
     #[tokio::test]
+    #[serial]
     async fn mpv_test() {
         let handle = Mpv::new("/tmp/mpv.sock").await;
 
@@ -240,6 +242,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn seek_test() {
         let handle = Mpv::new("/tmp/mpv.sock").await;
 
@@ -258,6 +261,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn property_test() {
         let handle = Mpv::new("/tmp/mpv.sock").await;
         for property in Property::iter() {
@@ -270,6 +274,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn ser_test() {
         for property in Property::iter() {
             let strum_txt = property.to_string();
