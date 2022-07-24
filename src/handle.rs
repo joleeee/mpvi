@@ -1,6 +1,6 @@
 use tokio::sync::{mpsc, oneshot};
 
-use super::{Command, Event, MpvError, MpvMsg, MpvSocket, Property};
+use super::{sock::MpvSocketError, Command, Event, MpvMsg, MpvSocket, Property};
 
 pub mod option {
     use serde::Serialize;
@@ -30,7 +30,7 @@ pub struct MpvHandle {
 #[derive(Debug)]
 pub enum HandleError {
     RecvError(mpsc::error::SendError<MpvMsg>),
-    MpvError(MpvError),
+    MpvSocketError(MpvSocketError),
 }
 
 impl From<mpsc::error::SendError<MpvMsg>> for HandleError {
@@ -39,9 +39,9 @@ impl From<mpsc::error::SendError<MpvMsg>> for HandleError {
     }
 }
 
-impl From<MpvError> for HandleError {
-    fn from(e: MpvError) -> Self {
-        Self::MpvError(e)
+impl From<MpvSocketError> for HandleError {
+    fn from(e: MpvSocketError) -> Self {
+        Self::MpvSocketError(e)
     }
 }
 

@@ -40,7 +40,7 @@ pub struct MpvError(pub String);
 pub enum MpvMsg {
     Command(
         Command,
-        oneshot::Sender<Result<serde_json::Value, MpvError>>,
+        oneshot::Sender<Result<serde_json::Value, MpvSocketError>>,
     ),
     NewSub(mpsc::Sender<Event>),
 }
@@ -52,6 +52,32 @@ pub struct MpvSocket {
     handle_receiver: mpsc::Receiver<MpvMsg>,
     /// Vector of senders to send events to
     event_senders: Vec<mpsc::Sender<Event>>,
+}
+
+#[derive(Debug)]
+pub enum MpvSocketError {
+    SendError(mpsc::error::SendError<Event>),
+    MpvError(MpvError),
+    IoError(io::Error),
+    OneshotError,
+}
+
+impl From<mpsc::error::SendError<Event>> for MpvSocketError {
+    fn from(e: mpsc::error::SendError<Event>) -> Self {
+        Self::SendError(e)
+    }
+}
+
+impl From<MpvError> for MpvSocketError {
+    fn from(e: MpvError) -> Self {
+        Self::MpvError(e)
+    }
+}
+
+impl From<io::Error> for MpvSocketError {
+    fn from(e: io::Error) -> Self {
+        Self::IoError(e)
+    }
 }
 
 impl MpvSocket {
@@ -69,34 +95,37 @@ impl MpvSocket {
     }
 
     // work around not being able to share ownership
-    async fn recv_response(reader: &mut BufReader<OwnedReadHalf>) -> MpvResponse {
+    async fn recv_response(
+        reader: &mut BufReader<OwnedReadHalf>,
+    ) -> Result<MpvResponse, MpvSocketError> {
         let mut buf = String::new();
-        reader.read_line(&mut buf).await.unwrap();
-        serde_json::from_str(&buf).unwrap()
+        reader.read_line(&mut buf).await?;
+        Ok(serde_json::from_str(&buf).unwrap())
     }
 
-    async fn send_message(&mut self, cmd: Command) {
+    async fn send_message(&mut self, cmd: Command) -> Result<(), MpvSocketError> {
         let txt = serde_json::to_string(&cmd).unwrap();
-        self.writer.write_all(txt.as_bytes()).await.unwrap();
-        self.writer.write_u8(b'\n').await.unwrap();
+        self.writer.write_all(txt.as_bytes()).await?;
+        self.writer.write_u8(b'\n').await?;
+        Ok(())
     }
 
-    async fn get_awck(&mut self) -> Result<serde_json::Value, MpvError> {
+    async fn get_awck(&mut self) -> Result<serde_json::Value, MpvSocketError> {
         let awck = loop {
-            match Self::recv_response(&mut self.reader).await {
+            match Self::recv_response(&mut self.reader).await? {
                 MpvResponse::Awck(awck) => break awck,
-                MpvResponse::Event(e) => self.propagate_event(e).await,
+                MpvResponse::Event(e) => self.propagate_event(e).await?,
             }
         };
 
         if awck.error == "success" {
             Ok(awck.data)
         } else {
-            Err(MpvError(awck.error))
+            Err(MpvError(awck.error).into())
         }
     }
 
-    async fn propagate_event(&mut self, event: Event) {
+    async fn propagate_event(&mut self, event: Event) -> Result<(), MpvSocketError> {
         let mut retain = Vec::new();
 
         // we drop senders that error on the basis that if they are closed immediately after then
@@ -107,7 +136,7 @@ impl MpvSocket {
                     if tx.is_closed() {
                         false
                     } else {
-                        panic!("{}", e);
+                        return Err(e.into());
                     }
                 }
                 Ok(_) => true,
@@ -119,24 +148,27 @@ impl MpvSocket {
         let mut retain = retain.iter();
 
         self.event_senders.retain(|_| *retain.next().unwrap());
+
+        Ok(())
     }
 
-    pub async fn run_actor(mut self) {
+    pub async fn run_actor(mut self) -> Result<(), MpvSocketError> {
         loop {
             select! {
                 Some(msg) = self.handle_receiver.recv() => {
                     match msg {
                         MpvMsg::Command(cmd, oneshot) => {
-                            self.send_message(cmd).await;
+                            self.send_message(cmd).await?;
                             let awck = self.get_awck().await;
-                            oneshot.send(awck).unwrap();
+                            // hm
+                            oneshot.send(awck).map_err(|_| MpvSocketError::OneshotError)?;
                         },
                         MpvMsg::NewSub(tx) => self.event_senders.push(tx),
                     }
                 },
                 resp = Self::recv_response(&mut self.reader) => {
-                    match resp {
-                        MpvResponse::Event(e) => self.propagate_event(e).await,
+                    match resp? {
+                        MpvResponse::Event(e) => self.propagate_event(e).await?,
                         MpvResponse::Awck(_) => panic!("should never receieve an unsolicited awck"),
                     }
                 }

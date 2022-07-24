@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use strum::{Display, EnumIter, EnumString};
 
 mod sock;
-use sock::{Command, MpvError, MpvMsg, MpvSocket};
+use sock::{Command, MpvMsg, MpvSocket};
 
 mod handle;
 pub use handle::option;
@@ -202,8 +202,7 @@ pub enum Property {
 
 #[cfg(test)]
 mod tests {
-    use super::handle::option;
-    use super::*;
+    use super::{handle::option, sock::MpvSocketError, *};
     use serial_test::serial;
     use strum::IntoEnumIterator;
     use tokio::{
@@ -279,8 +278,10 @@ mod tests {
             if let Err(e) = res {
                 match e {
                     // acceptable error
-                    handle::HandleError::MpvError(e) => assert_eq!(e.0, "property unavailable"),
-                    handle::HandleError::RecvError(e) => Err(e).unwrap(),
+                    handle::HandleError::MpvSocketError(MpvSocketError::MpvError(e)) => {
+                        assert_eq!(e.0, "property unavailable")
+                    }
+                    _ => Err(e).unwrap(),
                 }
             }
         }
