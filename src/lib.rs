@@ -218,6 +218,13 @@ mod tests {
 
         let (tx, rx) = mpsc::channel(8);
         handle.subscribe_events(tx).await.unwrap();
+
+        // subscribe and then drop sender
+        {
+            let (tx, _rx) = mpsc::channel(8);
+            handle.subscribe_events(tx).await.unwrap();
+        }
+
         tokio::spawn(print_events(rx));
 
         println!("Pausing...");

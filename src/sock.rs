@@ -97,9 +97,28 @@ impl MpvSocket {
     }
 
     async fn propagate_event(&mut self, event: Event) {
+        let mut retain = Vec::new();
+
+        // we drop senders that error on the basis that if they are closed immediately after then
+        // they were probably closed when the error occured, and that is the case of the error
         for tx in &self.event_senders {
-            tx.send(event.clone()).await.unwrap();
+            let keep = match tx.send(event.clone()).await {
+                Err(e) => {
+                    if tx.is_closed() {
+                        false
+                    } else {
+                        panic!("{}", e);
+                    }
+                }
+                Ok(_) => true,
+            };
+
+            retain.push(keep);
         }
+
+        let mut retain = retain.iter();
+
+        self.event_senders.retain(|_| *retain.next().unwrap());
     }
 
     pub async fn run_actor(mut self) {
