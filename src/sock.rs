@@ -56,27 +56,27 @@ pub struct MpvSocket {
 
 #[derive(Debug)]
 pub enum MpvSocketError {
-    SendError(mpsc::error::SendError<Event>),
-    MpvError(MpvError),
-    IoError(io::Error),
-    OneshotError,
+    Send(mpsc::error::SendError<Event>),
+    Mpv(MpvError),
+    Io(io::Error),
+    Oneshot,
 }
 
 impl From<mpsc::error::SendError<Event>> for MpvSocketError {
     fn from(e: mpsc::error::SendError<Event>) -> Self {
-        Self::SendError(e)
+        Self::Send(e)
     }
 }
 
 impl From<MpvError> for MpvSocketError {
     fn from(e: MpvError) -> Self {
-        Self::MpvError(e)
+        Self::Mpv(e)
     }
 }
 
 impl From<io::Error> for MpvSocketError {
     fn from(e: io::Error) -> Self {
-        Self::IoError(e)
+        Self::Io(e)
     }
 }
 
@@ -161,7 +161,7 @@ impl MpvSocket {
                             self.send_message(cmd).await?;
                             let awck = self.get_awck().await;
                             // hm
-                            oneshot.send(awck).map_err(|_| MpvSocketError::OneshotError)?;
+                            oneshot.send(awck).map_err(|_| MpvSocketError::Oneshot)?;
                         },
                         MpvMsg::NewSub(tx) => self.event_senders.push(tx),
                     }

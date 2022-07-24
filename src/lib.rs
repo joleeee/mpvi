@@ -278,7 +278,7 @@ mod tests {
             if let Err(e) = res {
                 match e {
                     // acceptable error
-                    handle::HandleError::MpvSocketError(MpvSocketError::MpvError(e)) => {
+                    handle::HandleError::MpvSocketError(MpvSocketError::Mpv(e)) => {
                         assert_eq!(e.0, "property unavailable")
                     }
                     _ => Err(e).unwrap(),
