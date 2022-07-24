@@ -1,6 +1,6 @@
 use tokio::sync::{mpsc, oneshot};
 
-use super::{sock::MpvSocketError, Command, Event, MpvMsg, MpvSocket, Property};
+use crate::{sock::MpvSocketError, Command, Event, MpvMsg, MpvSocket, Property};
 
 pub mod option {
     use serde::Serialize;

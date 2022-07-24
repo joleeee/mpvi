@@ -10,7 +10,7 @@ use tokio::{
     sync::{mpsc, oneshot},
 };
 
-use super::Event;
+use crate::Event;
 
 #[derive(Deserialize, Debug)]
 struct Awck {

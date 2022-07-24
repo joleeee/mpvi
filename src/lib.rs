@@ -202,7 +202,7 @@ pub enum Property {
 
 #[cfg(test)]
 mod tests {
-    use super::{handle::option, sock::MpvSocketError, *};
+    use crate::{handle::option, sock::MpvSocketError, *};
     use serial_test::serial;
     use strum::IntoEnumIterator;
     use tokio::{
