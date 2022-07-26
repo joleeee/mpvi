@@ -70,7 +70,7 @@ impl MpvHandle {
             .send(MpvMsg::Command(Command { command }, sender))
             .await?;
 
-        receiver.await.unwrap().map_err(Into::into)
+        receiver.await.expect("receive failed").map_err(Into::into)
     }
 
     pub async fn set_property(
@@ -104,7 +104,7 @@ impl MpvHandle {
 
     pub async fn get_pause(&self) -> Result<bool, HandleError> {
         let res = self.get_property(Property::Pause).await;
-        res.map(|val| val.as_bool().unwrap())
+        res.map(|val| val.as_bool().expect("pause is not a bool"))
     }
 
     pub async fn seek<S: ToString>(
@@ -112,7 +112,7 @@ impl MpvHandle {
         seconds: S,
         mode: option::Seek,
     ) -> Result<(), HandleError> {
-        let mode = serde_json::to_value(&mode).unwrap();
+        let mode = serde_json::to_value(&mode).expect("failed to serialize");
 
         self.send_command(vec!["seek".into(), seconds.to_string().into(), mode])
             .await
@@ -124,7 +124,7 @@ impl MpvHandle {
         file: &str,
         insertion: option::Insertion,
     ) -> Result<(), HandleError> {
-        let insertion = serde_json::to_value(&insertion).unwrap();
+        let insertion = serde_json::to_value(&insertion).expect("failed to serialize");
 
         self.send_command(vec!["loadfile".into(), file.into(), insertion])
             .await

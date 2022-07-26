@@ -104,7 +104,7 @@ impl MpvSocket {
     }
 
     async fn send_message(&mut self, cmd: Command) -> Result<(), MpvSocketError> {
-        let txt = serde_json::to_string(&cmd).unwrap();
+        let txt = serde_json::to_string(&cmd).expect("failed to serialize");
         self.writer.write_all(txt.as_bytes()).await?;
         self.writer.write_u8(b'\n').await?;
         Ok(())
@@ -147,7 +147,8 @@ impl MpvSocket {
 
         let mut retain = retain.iter();
 
-        self.event_senders.retain(|_| *retain.next().unwrap());
+        self.event_senders
+            .retain(|_| *retain.next().expect("fewer bools than elements"));
 
         Ok(())
     }
