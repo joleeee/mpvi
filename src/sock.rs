@@ -59,6 +59,7 @@ pub enum MpvSocketError {
     Send(mpsc::error::SendError<Event>),
     Mpv(MpvError),
     Io(io::Error),
+    Serde(serde_json::Error),
     Oneshot,
 }
 
@@ -77,6 +78,12 @@ impl From<MpvError> for MpvSocketError {
 impl From<io::Error> for MpvSocketError {
     fn from(e: io::Error) -> Self {
         Self::Io(e)
+    }
+}
+
+impl From<serde_json::Error> for MpvSocketError {
+    fn from(e: serde_json::Error) -> Self {
+        Self::Serde(e)
     }
 }
 
@@ -100,7 +107,7 @@ impl MpvSocket {
     ) -> Result<MpvResponse, MpvSocketError> {
         let mut buf = String::new();
         reader.read_line(&mut buf).await?;
-        Ok(serde_json::from_str(&buf).unwrap())
+        Ok(serde_json::from_str(&buf)?)
     }
 
     async fn send_message(&mut self, cmd: Command) -> Result<(), MpvSocketError> {
